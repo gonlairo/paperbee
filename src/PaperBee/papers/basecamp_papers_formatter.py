@@ -24,22 +24,25 @@ class BasecampPaperPublisher:
     LAUNCHPAD_TOKEN_URL = "https://launchpad.37signals.com/authorization/token"
     API_BASE = "https://3.basecampapi.com"
 
-    def __init__(self,
-                 account_id: str,
-                 client_id: str,
-                 client_secret: str,
-                 user_agent: str,
-                 logger: Logger,
-                 bucket_id: str,
-                 board_id: str,
-                 access_token: Optional[str] = None,
-                 refresh_token: Optional[str] = None):
+    def __init__(
+        self,
+        logger: Logger,
+        account_id: str,
+        client_id: str,
+        client_secret: str,
+        user_agent: str,
+        bucket_id: str,
+        board_id: str,
+        access_token: str,
+        refresh_token: str,
+    ):
         self.account_id = account_id
         self.client_id = client_id
         self.client_secret = client_secret
         self.user_agent = user_agent
         self.logger = logger
-
+        self.bucket_id = bucket_id
+        self.board_id = board_id
         self.access_token = access_token
         self.refresh_token = refresh_token
         self._access_expires_at = 0  # epoch seconds when token expires (if known)
@@ -50,8 +53,6 @@ class BasecampPaperPublisher:
             "User-Agent": user_agent,
             "Accept": "application/json"
         })
-
-        # user-agent: MyApp (yourname@example.com)' \
 
     # ----------------------------
     # Authentication helpers
@@ -83,8 +84,7 @@ class BasecampPaperPublisher:
             resp.raise_for_status()
         payload = resp.json()
         self.access_token = payload.get("access_token")
-        # some endpoints return 'expires_in' seconds; store expiry timestamp if provided
-        expires_in = payload.get("expires_in") or payload.get("expires")
+        expires_in = payload.get("expires_in")
         if expires_in:
             self._access_expires_at = time.time() + int(expires_in)
         # if the server returned a new refresh_token, update it
@@ -145,8 +145,7 @@ class BasecampPaperPublisher:
 
     def build_message(
         self,
-        papers: List[str],
-        preprints: List[str],
+        papers: List[List[str]],
     ) -> str:
         """
         Build a simple HTML body for a Basecamp Message's `content` field.
@@ -155,33 +154,58 @@ class BasecampPaperPublisher:
         parts = []
         parts.append(
             f"<p><strong>Good morning ☕ Here are today's papers!</strong></p>")
-        parts.append("<hr/>")
-        if preprints:
-            parts.append("<h3>Preprints</h3><ul>")
-            for p in preprints:
-                # p expected to be like "<url|title>" in your Slack code; now assume (url, title) or preformatted string
-                # If p is formatted "<url|title>" we try a safe conversion; otherwise embed as text
-                parts.append(f"<li>{self._escape_html(p)}</li>")
-            parts.append("</ul><hr/>")
-        else:
-            parts.append("<p>No preprints today.</p><hr/>")
+        parts.append("<h3>Papers</h3><ul>")
 
-        if papers:
-            parts.append("<h3>Papers</h3><ul>")
-            for p in papers:
-                parts.append(f"<li>{self._escape_html(p)}</li>")
-            parts.append("</ul>")
-        else:
-            parts.append("<p>No papers today.</p>")
-
+        for p in papers:
+            title = p[4]
+            link = p[-1]
+            parts.append(
+                f"<li><a href='{link}'>{self._escape_html(title)}</a></li>")
+        parts.append("</ul>")
         parts.append("<hr/>")
         parts.append('<p>Posted automatically by <code>paperbee</code></p>')
         return "".join(parts)
 
+        #example: ['10.1101/2025.09.10.674954', '2025-09-17', '2025-09-16', 'TRUE', 'Differentiation hierarchy in adult B cell acute lymphoblastic leukemia at clonal resolution', '', None, 'https://doi.org/10.1101/2025.09.10.674954']
+
     # ----------------------------
     # Publish
     # ----------------------------
-    def publish_papers(self, papers_list: List[List[str]]) -> Dict[str, Any]:
+
+    @staticmethod
+    def format_papers(
+        papers_list: List[List[str]],) -> Tuple[List[str], List[str]]:
+        """
+        Splits and formats papers into preprints and regular papers for Mattermost.
+        Args:
+            papers_list: List of paper records.
+        Returns:
+            Tuple of (papers, preprints) as formatted strings.
+        """
+        papers = []
+        preprints = []
+        for idx, paper in enumerate(papers_list):
+            if not isinstance(paper, list) or len(paper) < 6:
+                print(
+                    f"Warning: Skipping invalid paper at index {idx}: {paper}")
+                continue
+            emoji = "✏️" if paper[3] == "TRUE" else "🗞️"
+            title = paper[4]
+            link = paper[-1]
+            if not isinstance(title, str) or not isinstance(link, str):
+                print(
+                    f"Warning: Skipping paper with invalid title or link at index {idx}: {paper}"
+                )
+                continue
+            formatted_paper = f"{emoji} [{title}]({link})"
+            if paper[3] == "TRUE":
+                preprints.append(formatted_paper)
+            else:
+                papers.append(formatted_paper)
+        return papers, preprints
+
+    async def publish_papers(self,
+                             papers_list: List[List[str]]) -> Dict[str, Any]:
         """  
         Find project + board, and create a Message.
         Returns the created message JSON on success.
@@ -214,18 +238,17 @@ class BasecampPaperPublisher:
         # if not subject:
         #     subject = f"Papers — {today or ''}".strip()
 
-        papers, preprints = self.format_papers(papers_list)
-        content_html = self.build_message(papers, preprints)
+        #papers, preprints = self.format_papers(papers_list)
+        content_html = self.build_message(papers_list)
 
         body = {
-            "subject": "New subject here",
+            "subject": "Hello world!",
             "content": content_html,
             "status": "active"
         }
 
         url = f"{self.API_BASE}/{self.account_id}/buckets/{self.bucket_id}/message_boards/{self.board_id}/messages.json"
-
-        # self.session already has the headers, I think we don't need to pass them again
+        #self.session already has the headers, I think we don't need to pass them again
         r = self._session.post(url, json=body)
         if r.status_code not in (200, 201):
             self.logger.error("Failed to create message: %s %s", r.status_code,
@@ -233,3 +256,4 @@ class BasecampPaperPublisher:
             r.raise_for_status()
             self.logger.info("Posted message to Basecamp board")
         return r.json()
+        #return body

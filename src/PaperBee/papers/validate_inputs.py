@@ -3,8 +3,7 @@ from typing import Any, Optional, Tuple
 
 
 def validate_configuration(
-    config: dict,
-) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
+    config: dict,) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
     """
     Validate the root directory, google and NCBI credentials, and the query files.
 
@@ -46,7 +45,9 @@ def validate_platform_args(config: dict, platform: str) -> dict[str, Any]:
         raise ValueError(e)
 
     if platform_args.get("is_posting_on", False):
-        empty_args = [param for param in platform_args if not platform_args[param]]
+        empty_args = [
+            param for param in platform_args if not platform_args[param]
+        ]
         if empty_args:
             e = f"Missing required config params for {platform}: {', '.join(empty_args)}"
             raise ValueError(e)

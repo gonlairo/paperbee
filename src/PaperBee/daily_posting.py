@@ -34,25 +34,54 @@ async def daily_papers_search(
             - Zulip response
             - Mattermost response
     """
-    root_dir, query, query_biorxiv, query_pubmed_arxiv = validate_configuration(config)
+    root_dir, query, query_biorxiv, query_pubmed_arxiv = validate_configuration(
+        config)
 
     slack_args = validate_platform_args(config, "SLACK")
     zulip_args = validate_platform_args(config, "ZULIP")
     telegram_args = validate_platform_args(config, "TELEGRAM")
     mattermost_args = validate_platform_args(config, "MATTERMOST")
+    basecamp_args = validate_platform_args(config, "BASECAMP")
 
     if telegram_args == {}:
-        telegram_args = {"bot_token": "", "channel_id": "", "is_posting_on": False}
+        telegram_args = {
+            "bot_token": "",
+            "channel_id": "",
+            "is_posting_on": False
+        }
     if zulip_args == {}:
-        zulip_args = {"prc": "", "stream": "", "topic": "", "is_posting_on": False}
+        zulip_args = {
+            "prc": "",
+            "stream": "",
+            "topic": "",
+            "is_posting_on": False
+        }
     if slack_args == {}:
         slack_args = {"bot_token": "", "channel_id": "", "is_posting_on": False}
     if mattermost_args == {}:
-        mattermost_args = {"bot_token": "", "channel_id": "", "is_posting_on": False}
+        mattermost_args = {
+            "url": "",
+            "token": "",
+            "team": "",
+            "channel": "",
+            "is_posting_on": False
+        }
+
+    if basecamp_args == {}:
+        basecamp_args = {
+            "account_id": "",
+            "client_id": "",
+            "client_secret": "",
+            "user_agent": "",
+            "bucket_id": "",
+            "board_id": "",
+            "is_posting_on": False
+        }
 
     llm_filtering = config.get("LLM_FILTERING", False)
     if llm_filtering:
-        filtering_prompt, LLM_PROVIDER, LANGUAGE_MODEL, OPENAI_API_KEY = validate_llm_args(config, root_dir)
+        filtering_prompt, LLM_PROVIDER, LANGUAGE_MODEL, OPENAI_API_KEY = validate_llm_args(
+            config, root_dir)
     else:
         filtering_prompt = ""
         LLM_PROVIDER = ""
@@ -85,16 +114,32 @@ async def daily_papers_search(
         mattermost_token=mattermost_args["token"],
         mattermost_team=mattermost_args["team"],
         mattermost_channel=mattermost_args["channel"],
+        basecamp_client_id=basecamp_args["client_id"],
+        basecamp_client_secret=basecamp_args["client_secret"],
+        basecamp_account_id=basecamp_args["account_id"],
+        basecamp_user_agent=basecamp_args["user_agent"],
+        basecamp_bucket_id=basecamp_args["bucket_id"],
+        basecamp_board_id=basecamp_args["board_id"],
+        basecamp_access_token=basecamp_args["access_token"],
+        basecamp_refresh_token=basecamp_args["refresh_token"],
         databases=databases,
     )
-    papers, response_slack, response_telegram, response_zulip, response_mattermost = await finder.run_daily(
+    (
+        papers,
+        response_slack,
+        response_telegram,
+        response_zulip,
+        response_mattermost,
+        response_basecamp,
+    ) = await finder.run_daily(
         post_to_slack=slack_args["is_posting_on"],
         post_to_telegram=telegram_args["is_posting_on"],
         post_to_zulip=zulip_args["is_posting_on"],
         post_to_mattermost=mattermost_args["is_posting_on"],
+        post_to_basecamp=basecamp_args["is_posting_on"],
     )
 
-    return papers, response_slack, response_telegram, response_zulip, response_mattermost
+    return papers, response_slack, response_telegram, response_zulip, response_mattermost, response_basecamp
 
 
 def main() -> None:
@@ -102,7 +147,9 @@ def main() -> None:
     CLI entry point for PaperBee, supporting subcommands like 'post'.
     """
     parser = argparse.ArgumentParser(description="PaperBee CLI")
-    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
+    subparsers = parser.add_subparsers(dest="command",
+                                       required=True,
+                                       help="Available commands")
 
     # Subcommand: post
     post_parser = subparsers.add_parser("post", help="Post daily papers")
@@ -120,26 +167,27 @@ def main() -> None:
     post_parser.add_argument(
         "--since",
         type=int,
-        help="Filter out papers if published before the specified number of days ago.",
+        help=
+        "Filter out papers if published before the specified number of days ago.",
     )
     post_parser.add_argument(
         "--databases",
         nargs="+",
         type=str,
-        help="Specify any combination of databases to search among the available ones 'pubmed','arxiv', and 'biorxiv'(e.g., ['pubmed', 'arxiv']).",
+        help=
+        "Specify any combination of databases to search among the available ones 'pubmed','arxiv', and 'biorxiv'(e.g., ['pubmed', 'arxiv']).",
     )
     args = parser.parse_args()
 
     # Dispatch to the appropriate subcommand
     if args.command == "post":
         config = load_config(args.config)
-        papers, _, _, _, _ = asyncio.run(
+        papers, _, _, _, _, _ = asyncio.run(
             daily_papers_search(
                 config,
                 interactive=args.interactive,
                 since=args.since,
                 databases=args.databases,
-            )
-        )
+            ))
         print("Papers found:")
         print(papers)
