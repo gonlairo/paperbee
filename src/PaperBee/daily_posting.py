@@ -34,8 +34,7 @@ async def daily_papers_search(
             - Zulip response
             - Mattermost response
     """
-    root_dir, query, query_biorxiv, query_pubmed_arxiv = validate_configuration(
-        config)
+    root_dir, query, query_biorxiv, query_pubmed_arxiv = validate_configuration(config)
 
     slack_args = validate_platform_args(config, "SLACK")
     zulip_args = validate_platform_args(config, "ZULIP")
@@ -44,28 +43,13 @@ async def daily_papers_search(
     basecamp_args = validate_platform_args(config, "BASECAMP")
 
     if telegram_args == {}:
-        telegram_args = {
-            "bot_token": "",
-            "channel_id": "",
-            "is_posting_on": False
-        }
+        telegram_args = {"bot_token": "", "channel_id": "", "is_posting_on": False}
     if zulip_args == {}:
-        zulip_args = {
-            "prc": "",
-            "stream": "",
-            "topic": "",
-            "is_posting_on": False
-        }
+        zulip_args = {"prc": "", "stream": "", "topic": "", "is_posting_on": False}
     if slack_args == {}:
         slack_args = {"bot_token": "", "channel_id": "", "is_posting_on": False}
     if mattermost_args == {}:
-        mattermost_args = {
-            "url": "",
-            "token": "",
-            "team": "",
-            "channel": "",
-            "is_posting_on": False
-        }
+        mattermost_args = {"url": "", "token": "", "team": "", "channel": "", "is_posting_on": False}
 
     if basecamp_args == {}:
         basecamp_args = {
@@ -75,13 +59,12 @@ async def daily_papers_search(
             "user_agent": "",
             "bucket_id": "",
             "board_id": "",
-            "is_posting_on": False
+            "is_posting_on": False,
         }
 
     llm_filtering = config.get("LLM_FILTERING", False)
     if llm_filtering:
-        filtering_prompt, LLM_PROVIDER, LANGUAGE_MODEL, OPENAI_API_KEY = validate_llm_args(
-            config, root_dir)
+        filtering_prompt, LLM_PROVIDER, LANGUAGE_MODEL, OPENAI_API_KEY = validate_llm_args(config, root_dir)
     else:
         filtering_prompt = ""
         LLM_PROVIDER = ""
@@ -147,9 +130,7 @@ def main() -> None:
     CLI entry point for PaperBee, supporting subcommands like 'post'.
     """
     parser = argparse.ArgumentParser(description="PaperBee CLI")
-    subparsers = parser.add_subparsers(dest="command",
-                                       required=True,
-                                       help="Available commands")
+    subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     # Subcommand: post
     post_parser = subparsers.add_parser("post", help="Post daily papers")
@@ -167,15 +148,13 @@ def main() -> None:
     post_parser.add_argument(
         "--since",
         type=int,
-        help=
-        "Filter out papers if published before the specified number of days ago.",
+        help="Filter out papers if published before the specified number of days ago.",
     )
     post_parser.add_argument(
         "--databases",
         nargs="+",
         type=str,
-        help=
-        "Specify any combination of databases to search among the available ones 'pubmed','arxiv', and 'biorxiv'(e.g., ['pubmed', 'arxiv']).",
+        help="Specify any combination of databases to search among the available ones 'pubmed','arxiv', and 'biorxiv'(e.g., ['pubmed', 'arxiv']).",
     )
     args = parser.parse_args()
 
@@ -188,6 +167,7 @@ def main() -> None:
                 interactive=args.interactive,
                 since=args.since,
                 databases=args.databases,
-            ))
+            )
+        )
         print("Papers found:")
         print(papers)

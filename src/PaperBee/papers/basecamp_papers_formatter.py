@@ -1,9 +1,9 @@
-import time
-import requests
 import html
-from typing import List, Optional, Tuple, Dict, Any
-import pandas as pd
+import time
 from logging import Logger
+from typing import Any, Dict, List, Tuple
+
+import requests
 
 # Example: pip install requests
 
@@ -21,7 +21,7 @@ class BasecampPaperPublisher:
         logger: logging.Logger instance.
     """
 
-    LAUNCHPAD_TOKEN_URL = "https://launchpad.37signals.com/authorization/token"
+    LAUNCHPAD_AUTH_URL = "https://launchpad.37signals.com/authorization/token"
     API_BASE = "https://3.basecampapi.com"
 
     def __init__(
@@ -49,10 +49,7 @@ class BasecampPaperPublisher:
 
         # small session for connection pooling
         self._session = requests.Session()
-        self._session.headers.update({
-            "User-Agent": user_agent,
-            "Accept": "application/json"
-        })
+        self._session.headers.update({"User-Agent": user_agent, "Accept": "application/json"})
 
     # ----------------------------
     # Authentication helpers
@@ -66,8 +63,8 @@ class BasecampPaperPublisher:
     def _refresh_access_token(self) -> None:
         """Refresh access token using refresh_token."""
         if not self.refresh_token:
-            raise RuntimeError(
-                "No refresh_token available to refresh access token.")
+            msg = "No refresh_token available."
+            raise RuntimeError(msg)
 
         data = {
             "type": "refresh",  # community examples use this type for refresh
@@ -75,12 +72,9 @@ class BasecampPaperPublisher:
             "client_secret": self.client_secret,
             "refresh_token": self.refresh_token,
         }
-        resp = requests.post(self.LAUNCHPAD_TOKEN_URL,
-                             data=data,
-                             headers={"User-Agent": self.user_agent})
+        resp = requests.post(self.LAUNCHPAD_AUTH_URL, data=data, headers={"User-Agent": self.user_agent}, timeout=30)
         if resp.status_code != 200:
-            self.logger.error("Failed to refresh Basecamp token: %s %s",
-                              resp.status_code, resp.text)
+            self.logger.error("Failed to refresh Basecamp token: %s %s", resp.status_code, resp.text)
             resp.raise_for_status()
         payload = resp.json()
         self.access_token = payload.get("access_token")
@@ -94,7 +88,7 @@ class BasecampPaperPublisher:
         # update session auth header
         self._session.headers.update({
             "Authorization": f"Bearer {self.access_token}",
-            "Content-Type": "application/json; charset=utf-8"
+            "Content-Type": "application/json; charset=utf-8",
         })
 
     # ----------------------------
@@ -152,21 +146,19 @@ class BasecampPaperPublisher:
         Basecamp uses HTML rich text for message content.
         """
         parts = []
-        parts.append(
-            f"<p><strong>Good morning ☕ Here are today's papers!</strong></p>")
+        parts.append("<p><strong>Good morning ☕ Here are today's papers!</strong></p>")
         parts.append("<h3>Papers</h3><ul>")
 
         for p in papers:
             title = p[4]
             link = p[-1]
-            parts.append(
-                f"<li><a href='{link}'>{self._escape_html(title)}</a></li>")
+            parts.append(f"<li><a href='{link}'>{self._escape_html(title)}</a></li>")
         parts.append("</ul>")
         parts.append("<hr/>")
-        parts.append('<p>Posted automatically by <code>paperbee</code></p>')
+        parts.append("<p>Posted automatically by <code>paperbee</code></p>")
         return "".join(parts)
 
-        #example: ['10.1101/2025.09.10.674954', '2025-09-17', '2025-09-16', 'TRUE', 'Differentiation hierarchy in adult B cell acute lymphoblastic leukemia at clonal resolution', '', None, 'https://doi.org/10.1101/2025.09.10.674954']
+        # example: ['10.1101/2025.09.10.674954', '2025-09-17', '2025-09-16', 'TRUE', 'Differentiation hierarchy in adult B cell acute lymphoblastic leukemia at clonal resolution', '', None, 'https://doi.org/10.1101/2025.09.10.674954']
 
     # ----------------------------
     # Publish
@@ -174,7 +166,8 @@ class BasecampPaperPublisher:
 
     @staticmethod
     def format_papers(
-        papers_list: List[List[str]],) -> Tuple[List[str], List[str]]:
+        papers_list: List[List[str]],
+    ) -> Tuple[List[str], List[str]]:
         """
         Splits and formats papers into preprints and regular papers for Mattermost.
         Args:
@@ -186,16 +179,13 @@ class BasecampPaperPublisher:
         preprints = []
         for idx, paper in enumerate(papers_list):
             if not isinstance(paper, list) or len(paper) < 6:
-                print(
-                    f"Warning: Skipping invalid paper at index {idx}: {paper}")
+                print(f"Warning: Skipping invalid paper at index {idx}: {paper}")
                 continue
             emoji = "✏️" if paper[3] == "TRUE" else "🗞️"
             title = paper[4]
             link = paper[-1]
             if not isinstance(title, str) or not isinstance(link, str):
-                print(
-                    f"Warning: Skipping paper with invalid title or link at index {idx}: {paper}"
-                )
+                print(f"Warning: Skipping paper with invalid title or link at index {idx}: {paper}")
                 continue
             formatted_paper = f"{emoji} [{title}]({link})"
             if paper[3] == "TRUE":
@@ -204,9 +194,8 @@ class BasecampPaperPublisher:
                 papers.append(formatted_paper)
         return papers, preprints
 
-    async def publish_papers(self,
-                             papers_list: List[List[str]]) -> Dict[str, Any]:
-        """  
+    async def publish_papers(self, papers_list: List[List[str]]) -> Dict[str, Any]:
+        """
         Find project + board, and create a Message.
         Returns the created message JSON on success.
         """
@@ -238,22 +227,17 @@ class BasecampPaperPublisher:
         # if not subject:
         #     subject = f"Papers — {today or ''}".strip()
 
-        #papers, preprints = self.format_papers(papers_list)
+        # papers, preprints = self.format_papers(papers_list)
         content_html = self.build_message(papers_list)
 
-        body = {
-            "subject": "Hello world!",
-            "content": content_html,
-            "status": "active"
-        }
+        body = {"subject": "Hello world!", "content": content_html, "status": "active"}
 
         url = f"{self.API_BASE}/{self.account_id}/buckets/{self.bucket_id}/message_boards/{self.board_id}/messages.json"
-        #self.session already has the headers, I think we don't need to pass them again
+        # self.session already has the headers, I think we don't need to pass them again
         r = self._session.post(url, json=body)
         if r.status_code not in (200, 201):
-            self.logger.error("Failed to create message: %s %s", r.status_code,
-                              r.text)
+            self.logger.error("Failed to create message: %s %s", r.status_code, r.text)
             r.raise_for_status()
             self.logger.info("Posted message to Basecamp board")
         return r.json()
-        #return body
+        # return body
