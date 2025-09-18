@@ -1,11 +1,10 @@
 import html
 import time
+from datetime import datetime
 from logging import Logger
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List
 
 import requests
-
-# Example: pip install requests
 
 
 class BasecampPaperPublisher:
@@ -13,12 +12,15 @@ class BasecampPaperPublisher:
     Publish papers (from a spreadsheet) to a Basecamp Message Board.
 
     Args:
+        logger: logging.Logger instance.
         account_id: Basecamp account id (the {ACCOUNT_ID} in URLs).
         client_id, client_secret: OAuth credentials (from launchpad.37signals.com).
+        client_secret: OAuth credentials (from launchpad.37signals.com).
+        user_agent: string identifying your app (required by Basecamp).
+        bucket_id: Basecamp bucket id (the {BUCKET_ID} in URLs).
+        board_id: Basecamp board id (the {BOARD_ID} in URLs).
         access_token: optional initial access token.
         refresh_token: refresh token (used to obtain new access tokens).
-        user_agent: string identifying your app (required by Basecamp).
-        logger: logging.Logger instance.
     """
 
     LAUNCHPAD_AUTH_URL = "https://launchpad.37signals.com/authorization/token"
@@ -51,9 +53,6 @@ class BasecampPaperPublisher:
         self._session = requests.Session()
         self._session.headers.update({"User-Agent": user_agent, "Accept": "application/json"})
 
-    # ----------------------------
-    # Authentication helpers
-    # ----------------------------
     def _ensure_access_token(self) -> None:
         """Ensure we have a valid access token; refresh if needed."""
         if not self.access_token or time.time() >= self._access_expires_at - 30:
@@ -66,6 +65,7 @@ class BasecampPaperPublisher:
             msg = "No refresh_token available."
             raise RuntimeError(msg)
 
+        # NOTE(Rodrigo): {"type": "refresh"} as in https://github.com/basecamp/api/blob/master/sections/authentication.md
         data = {
             "type": "refresh",  # community examples use this type for refresh
             "client_id": self.client_id,
@@ -91,48 +91,6 @@ class BasecampPaperPublisher:
             "Content-Type": "application/json; charset=utf-8",
         })
 
-    # ----------------------------
-    # Discovery helpers
-    # ----------------------------
-    # def list_projects(self) -> List[Dict[str, Any]]:
-    #     """Return list of projects for the account."""
-    #     self._ensure_access_token()
-    #     url = f"{self.API_BASE}/{self.account_id}/projects.json"
-    #     r = self._session.get(url)
-    #     r.raise_for_status()
-    #     return r.json()
-
-    # def find_project_by_name(self,
-    #                          project_name: str) -> Optional[Dict[str, Any]]:
-    #     """Find the project dict by (case-insensitive) name. Returns the first match or None."""
-    #     projects = self.list_projects()
-    #     for p in projects:
-    #         if p.get("name") and p["name"].lower() == project_name.lower():
-    #             return p
-    #     return None
-
-    # def list_message_boards(self,
-    #                         project_bucket_id: str) -> List[Dict[str, Any]]:
-    #     """List message boards under a project's bucket id."""
-    #     self._ensure_access_token()
-    #     url = f"{self.API_BASE}/{self.account_id}/buckets/{project_bucket_id}/message_boards.json"
-    #     r = self._session.get(url)
-    #     r.raise_for_status()
-    #     return r.json()
-
-    # def find_message_board(self, project_bucket_id: str,
-    #                        board_name: str) -> Optional[
-    #                            Dict[str, Any],
-    #                        ]:
-    #     boards = self.list_message_boards(project_bucket_id)
-    #     for b in boards:
-    #         if b.get("name") and b["name"].lower() == board_name.lower():
-    #             return b
-    #     return None
-
-    # ----------------------------
-    # Formatting / content helpers
-    # ----------------------------
     @staticmethod
     def _escape_html(text: str) -> str:
         return html.escape(text)
@@ -147,90 +105,27 @@ class BasecampPaperPublisher:
         """
         parts = []
         parts.append("<p><strong>Good morning ☕ Here are today's papers!</strong></p>")
-        parts.append("<h3>Papers</h3><ul>")
-
+        # parts.append("<h3>Papers</h3><ul>")
+        parts.append("<ul>")
         for p in papers:
             title = p[4]
             link = p[-1]
             parts.append(f"<li><a href='{link}'>{self._escape_html(title)}</a></li>")
         parts.append("</ul>")
-        parts.append("<hr/>")
-        parts.append("<p>Posted automatically by <code>paperbee</code></p>")
+        # parts.append("<hr/>")
+        # parts.append("<p>Posted automatically by <code>paperbee</code></p>")
         return "".join(parts)
 
         # example: ['10.1101/2025.09.10.674954', '2025-09-17', '2025-09-16', 'TRUE', 'Differentiation hierarchy in adult B cell acute lymphoblastic leukemia at clonal resolution', '', None, 'https://doi.org/10.1101/2025.09.10.674954']
 
-    # ----------------------------
-    # Publish
-    # ----------------------------
-
-    @staticmethod
-    def format_papers(
-        papers_list: List[List[str]],
-    ) -> Tuple[List[str], List[str]]:
-        """
-        Splits and formats papers into preprints and regular papers for Mattermost.
-        Args:
-            papers_list: List of paper records.
-        Returns:
-            Tuple of (papers, preprints) as formatted strings.
-        """
-        papers = []
-        preprints = []
-        for idx, paper in enumerate(papers_list):
-            if not isinstance(paper, list) or len(paper) < 6:
-                print(f"Warning: Skipping invalid paper at index {idx}: {paper}")
-                continue
-            emoji = "✏️" if paper[3] == "TRUE" else "🗞️"
-            title = paper[4]
-            link = paper[-1]
-            if not isinstance(title, str) or not isinstance(link, str):
-                print(f"Warning: Skipping paper with invalid title or link at index {idx}: {paper}")
-                continue
-            formatted_paper = f"{emoji} [{title}]({link})"
-            if paper[3] == "TRUE":
-                preprints.append(formatted_paper)
-            else:
-                papers.append(formatted_paper)
-        return papers, preprints
-
     async def publish_papers(self, papers_list: List[List[str]]) -> Dict[str, Any]:
-        """
-        Find project + board, and create a Message.
-        Returns the created message JSON on success.
-        """
         self._ensure_access_token()
-
-        # # find project -> get its bucket id
-        # project = self.find_project_by_name(project_name)
-        # if not project:
-        #     raise RuntimeError(
-        #         f"Project named '{project_name}' not found in account {self.account_id}."
-        #     )
-
-        # # NOTE: in many Basecamp examples the project's "id" is its bucket id; some responses include 'id' or 'bucket' keys.
-        # # We'll try to use project['id'] as the bucket id.
-        # bucket_id = str(
-        #     project.get("id") or project.get("bucket", {}).get("id"))
-        # if not bucket_id:
-        #     raise RuntimeError(
-        #         "Could not determine project bucket id from project metadata.")
-
-        # board = self.find_message_board(bucket_id, board_name)
-        # if not board:
-        #     raise RuntimeError(
-        #         f"Message board '{board_name}' not found under project '{project_name}'."
-        #     )
-
-        # board_id = str(board["id"])
-
-        # if not subject:
-        #     subject = f"Papers — {today or ''}".strip()
 
         # papers, preprints = self.format_papers(papers_list)
         content_html = self.build_message(papers_list)
 
-        body = {"subject": "Hello world!", "content": content_html, "status": "active"}
+        today_str = datetime.now().strftime("%d-%m-%Y")
+        body = {"subject": f"Papers from {today_str}", "content": content_html, "status": "active"}
 
         url = f"{self.API_BASE}/{self.account_id}/buckets/{self.bucket_id}/message_boards/{self.board_id}/messages.json"
         # self.session already has the headers, I think we don't need to pass them again
@@ -240,4 +135,3 @@ class BasecampPaperPublisher:
             r.raise_for_status()
             self.logger.info("Posted message to Basecamp board")
         return r.json()
-        # return body

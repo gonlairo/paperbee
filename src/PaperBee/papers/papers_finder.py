@@ -406,9 +406,7 @@ class PapersFinder:
             Tuple[List[List[Any]], Any]: The papers posted and the response from the posting method.
         """
         processed_articles = self.find_and_process_papers()
-        print("processed_articles", processed_articles, flush=True)
         papers = self.update_google_sheet(processed_articles)
-        print("papers_googlesheet", papers, flush=True)
 
         response_slack = None
         response_telegram = None
