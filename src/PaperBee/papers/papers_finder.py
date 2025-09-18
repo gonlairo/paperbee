@@ -9,6 +9,7 @@ import pandas as pd
 from slack_sdk import WebClient
 from tqdm import tqdm
 
+from .basecamp_papers_formatter import BasecampPaperPublisher
 from .cli import InteractiveCLIFilter
 from .google_sheet import GoogleSheetsUpdater
 from .llm_filtering import LLMFilter
@@ -77,6 +78,14 @@ class PapersFinder:
         mattermost_token: str = "",
         mattermost_team: str = "",
         mattermost_channel: str = "",
+        basecamp_account_id: str = "",
+        basecamp_client_id: str = "",
+        basecamp_client_secret: str = "",
+        basecamp_user_agent: str = "",
+        basecamp_bucket_id: str = "",
+        basecamp_board_id: str = "",
+        basecamp_access_token: str = "",
+        basecamp_refresh_token: str = "",
         ncbi_api_key: str = "",
         databases: Optional[List[str]] = None,
     ) -> None:
@@ -127,6 +136,14 @@ class PapersFinder:
         self.mattermost_token: str = mattermost_token
         self.mattermost_team: str = mattermost_team
         self.mattermost_channel: str = mattermost_channel
+        self.basecamp_account_id: str = basecamp_account_id
+        self.basecamp_client_id: str = basecamp_client_id
+        self.basecamp_client_secret: str = basecamp_client_secret
+        self.basecamp_user_agent: str = basecamp_user_agent
+        self.basecamp_bucket_id: str = basecamp_bucket_id
+        self.basecamp_board_id: str = basecamp_board_id
+        self.basecamp_access_token: str = basecamp_access_token
+        self.basecamp_refresh_token: str = basecamp_refresh_token
         # Logger
         self.logger = Logger("PapersFinder")
         # NCBI API
@@ -238,6 +255,7 @@ class PapersFinder:
             credentials_json_path=self.google_credentials_json,
         )
         gsheet_cache = gsheet_updater.read_sheet_data(sheet_name=self.sheet_name)
+
         if gsheet_cache:
             published_dois = [article["DOI"] for article in gsheet_cache]
 
@@ -323,6 +341,27 @@ class PapersFinder:
         response = await mattermost_publisher.publish_papers(papers)
         return response
 
+    async def post_paper_to_basecamp(self, papers: List[List[str]]) -> Any:
+        """
+        Posts the papers to Basecamp.
+
+        Args:
+            papers (List[str]): List of papers to post to Basecamp.
+        """
+        basecamp_publisher = BasecampPaperPublisher(
+            Logger("BasecampPaperPublisher"),
+            account_id=self.basecamp_account_id,
+            client_id=self.basecamp_client_id,
+            client_secret=self.basecamp_client_secret,
+            user_agent=self.basecamp_user_agent,
+            bucket_id=self.basecamp_bucket_id,
+            board_id=self.basecamp_board_id,
+            access_token=self.basecamp_access_token,
+            refresh_token=self.basecamp_refresh_token,
+        )
+        response = await basecamp_publisher.publish_papers(papers)
+        return response
+
     def cleanup_files(self) -> None:
         """
         Deletes the search result files from the previous day to keep the directory clean.
@@ -352,6 +391,7 @@ class PapersFinder:
         post_to_telegram: bool = False,
         post_to_zulip: bool = False,
         post_to_mattermost: bool = False,
+        post_to_basecamp: bool = False,
     ) -> Tuple[List[List[Any]], Any | None, Any | None, Any | None, Any | None]:
         """
         The main method to orchestrate finding, processing, and updating papers in a Google Sheet on a daily schedule.
@@ -372,6 +412,7 @@ class PapersFinder:
         response_telegram = None
         response_zulip = None
         response_mattermost = None
+        response_basecamp = None
 
         if post_to_slack:
             response_slack = self.post_paper_to_slack(papers)
@@ -385,9 +426,12 @@ class PapersFinder:
         if post_to_mattermost:
             response_mattermost = await self.post_paper_to_mattermost(papers)
 
+        if post_to_basecamp:
+            response_basecamp = await self.post_paper_to_basecamp(papers)
+
         self.cleanup_files()
 
-        return papers, response_slack, response_telegram, response_zulip, response_mattermost
+        return papers, response_slack, response_telegram, response_zulip, response_mattermost, response_basecamp
 
     def send_csv(self, user_id: str, user_query: str) -> Tuple[pd.DataFrame, Any]:
         """

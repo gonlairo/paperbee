@@ -49,8 +49,20 @@ MATTERMOST:
   team: "your-mattermost-team-name" # The team name (not display name)
   channel: "your-mattermost-channel-name" # The channel name (not display name)
 
+# Basecamp configuration
+BASECAMP:
+  is_posting_on: true
+  access_token: "your-basecamp-access-token"
+  refresh_token: "your-basecamp-refresh-token"
+  client_id: "your-basecamp-client-id"
+  client_secret: "your-basecamp-client-secret"
+  account_id: "your-basecamp-account-id"
+  user_agent: "your-basecamp-user-agent"
+  bucket_id: "your-basecamp-bucket-id"
+  board_id: "your-basecamp-board-id"
+
+
 SLACK_TEST_CHANNEL_ID: "your-slack-test-channel-id" # not required so left outside of dictionary
 TELEGRAM_TEST_CHANNEL_ID: "your-slack-test-channel-id" # not required so left outside of dictionary
 MATTERMOST_TEST_CHANNEL_ID: "your-mattermost-test-channel-id" # not required so left outside of dictionary
 GOOGLE_TEST_SPREADSHEET_ID: "your-google-test-spreadsheet-id" # not required so left outside of dictionary
-
